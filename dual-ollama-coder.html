@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DUAL CORE — Parallel Ollama Coding Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --surface2: #161b22;
+    --border: #21262d;
+    --accent1: #00ff88;
+    --accent2: #ff6b35;
+    --accent3: #4fc3f7;
+    --text: #e6edf3;
+    --muted: #7d8590;
+    --code-bg: #010409;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .logo h1 {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, var(--accent1), var(--accent3));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .logo .subtitle {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .status-pills {
+    display: flex;
+    gap: 8px;
+  }
+
+  .pill {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 100px;
+    border: 1px solid;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pill.online { border-color: var(--accent1); color: var(--accent1); }
+  .pill.offline { border-color: #ff4444; color: #ff4444; }
+  .pill.pending { border-color: var(--muted); color: var(--muted); }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* SERVER CONFIG */
+  .server-config {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .server-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .server-card.active { border-color: var(--accent1); }
+  .server-card.error { border-color: #ff4444; }
+
+  .server-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .server-card.s1::before { background: var(--accent1); }
+  .server-card.s2::before { background: var(--accent2); }
+
+  .server-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .s1 .server-label { color: var(--accent1); }
+  .s2 .server-label { color: var(--accent2); }
+
+  .server-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    display: block;
+    font-family: 'Space Mono', monospace;
+  }
+
+  input, textarea, select {
+    width: 100%;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    border-color: var(--accent1);
+  }
+
+  .test-btn {
+    margin-top: 12px;
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+  }
+
+  .test-btn:hover {
+    border-color: var(--accent1);
+    color: var(--accent1);
+  }
+
+  /* MODE SELECTOR */
+  .mode-selector {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+
+  .mode-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .modes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .mode-btn {
+    padding: 12px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+  }
+
+  .mode-btn.active {
+    border-color: var(--accent1);
+    background: rgba(0,255,136,0.05);
+  }
+
+  .mode-btn .mode-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .mode-btn .mode-desc {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  .mode-btn.active .mode-name { color: var(--accent1); }
+
+  /* PROMPT AREA */
+  .prompt-area {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+
+  textarea.prompt {
+    min-height: 120px;
+    resize: vertical;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .prompt-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    align-items: center;
+  }
+
+  .run-btn {
+    flex: 1;
+    padding: 14px 24px;
+    background: var(--accent1);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+
+  .run-btn:hover { background: #00cc6a; transform: translateY(-1px); }
+  .run-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
+
+  .clear-btn {
+    padding: 14px 20px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .clear-btn:hover { border-color: #ff4444; color: #ff4444; }
+
+  /* PROCESSING INDICATOR */
+  .processing {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .processing.hidden { display: none; }
+
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent1);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* DUAL OUTPUT */
+  .dual-output {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .output-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .output-panel .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .o1 .panel-label { color: var(--accent1); }
+  .o2 .panel-label { color: var(--accent2); }
+
+  .panel-meta {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .output-content {
+    padding: 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text);
+    min-height: 200px;
+    max-height: 500px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .output-content.empty {
+    color: var(--muted);
+    font-style: italic;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* CONSENSUS OUTPUT */
+  .consensus-panel {
+    background: var(--surface);
+    border: 1px solid var(--accent3);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+
+  .consensus-panel .panel-header {
+    padding: 14px 20px;
+    background: rgba(79,195,247,0.05);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .consensus-panel .panel-header h3 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent3);
+    letter-spacing: 1px;
+  }
+
+  .consensus-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 100px;
+    background: rgba(79,195,247,0.15);
+    color: var(--accent3);
+    border: 1px solid var(--accent3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .consensus-content {
+    padding: 20px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text);
+    max-height: 600px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* CODE HIGHLIGHTING */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin: 8px 0;
+    overflow-x: auto;
+    color: var(--accent1);
+  }
+
+  /* DIFF VIEW */
+  .diff-added { color: var(--accent1); }
+  .diff-removed { color: #ff4444; }
+  .diff-neutral { color: var(--text); }
+
+  /* COPY BTN */
+  .copy-btn {
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .copy-btn:hover { border-color: var(--accent1); color: var(--accent1); }
+
+  /* SCORE BAR */
+  .score-section {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .score-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .score-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .score-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .score-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+
+  .s1-fill { background: var(--accent1); }
+  .s2-fill { background: var(--accent2); }
+
+  .score-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--code-bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .server-config, .dual-output, .modes { grid-template-columns: 1fr; }
+  }
+
+  .streaming-cursor::after {
+    content: '▋';
+    animation: blink 1s step-end infinite;
+    color: var(--accent1);
+  }
+
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+  .error-text { color: #ff4444; font-style: italic; }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  /* CORS / server hint box */
+  .cors-note {
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .cors-note pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    border-radius: 6px;
+    color: var(--text);
+    overflow-x: auto;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <h1>DUAL CORE</h1>
+      <span class="subtitle">Parallel Ollama Engine</span>
+    </div>
+    <div class="status-pills">
+      <div class="pill" id="pill1">
+        <div class="dot"></div>
+        <span>SERVER 1</span>
+      </div>
+      <div class="pill" id="pill2">
+        <div class="dot"></div>
+        <span>SERVER 2</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- SERVER CONFIG -->
+  <div class="server-config">
+    <div class="server-card s1" id="card1">
+      <div class="server-label">
+        <span>◈ Server Alpha</span>
+      </div>
+      <div class="server-inputs">
+        <div>
+          <label for="url1">HOST URL</label>
+          <input type="url" id="url1" value="http://localhost:8080/proxy/1" />
+        </div>
+        <div>
+          <label for="model1">MODEL</label>
+          <input type="text" id="model1" value="codellama" />
+        </div>
+      </div>
+      <button class="test-btn" onclick="testServer(1)">▶ TEST CONNECTION</button>
+    </div>
+
+    <div class="server-card s2" id="card2">
+      <div class="server-label">
+        <span>◈ Server Beta</span>
+      </div>
+      <div class="server-inputs">
+        <div>
+          <label for="url2">HOST URL</label>
+          <input type="url" id="url2" value="http://localhost:8080/proxy/2" />
+        </div>
+        <div>
+          <label for="model2">MODEL</label>
+          <input type="text" id="model2" value="deepseek-coder" />
+        </div>
+      </div>
+      <button class="test-btn" onclick="testServer(2)">▶ TEST CONNECTION</button>
+    </div>
+  </div>
+
+  <div class="cors-note" role="note" aria-live="polite">
+    <strong style="color:var(--text);font-weight:700;">Browser CORS note</strong>
+    <div style="margin-top:6px;">When calling Ollama directly from the browser you must start Ollama with CORS enabled. Examples:</div>
+    <pre>bash
+OLLAMA_ORIGINS="*" ollama serve
+
+# On Windows PowerShell
+powershell$env:OLLAMA_ORIGINS="*"; ollama serve
+
+# Second server on a different host/port
+OLLAMA_HOST=0.0.0.0:11435 OLLAMA_ORIGINS="*" ollama serve
+    </pre>
+  </div>
+
+  <!-- CONSENSUS MODE -->
+  <div class="mode-selector">
+    <div class="mode-title">◈ Consensus Strategy</div>
+    <div class="modes">
+      <div class="mode-btn active" data-mode="parallel" onclick="setMode('parallel')">
+        <div class="mode-name">⚡ Parallel</div>
+        <div class="mode-desc">Both run simultaneously. Best output selected.</div>
+      </div>
+      <div class="mode-btn" data-mode="debate" onclick="setMode('debate')">
+        <div class="mode-name">⚔ Debate</div>
+        <div class="mode-desc">Each reviews the other. Synthesised into final answer.</div>
+      </div>
+      <div class="mode-btn" data-mode="verify" onclick="setMode('verify')">
+        <div class="mode-name">✓ Verify</div>
+        <div class="mode-desc">Alpha codes. Beta verifies & fixes. Final merged.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROMPT -->
+  <div class="prompt-area">
+    <label for="prompt">CODING PROMPT</label>
+    <textarea class="prompt" id="prompt" placeholder="Describe the code you need... e.g. 'Write a Python function to parse nested JSON and flatten it to a dict with dot-notation keys'"></textarea>
+    <div class="prompt-actions">
+      <button class="run-btn" id="runBtn" onclick="run()">▶ ENGAGE DUAL CORE</button>
+      <button class="clear-btn" onclick="clearAll()">✕ CLEAR</button>
+    </div>
+  </div>
+
+  <!-- PROCESSING -->
+  <div class="processing hidden" id="processing">
+    <div class="spinner"></div>
+    <span id="processingText">Dispatching to both servers...</span>
+  </div>
+
+  <!-- SCORES -->
+  <div class="score-section hidden" id="scoreSection">
+    <div class="score-card">
+      <div class="score-label">Alpha Confidence</div>
+      <div class="score-num" id="score1">—</div>
+      <div class="score-bar"><div class="score-fill s1-fill" id="bar1" style="width:0%"></div></div>
+    </div>
+    <div class="score-card">
+      <div class="score-label">Beta Confidence</div>
+      <div class="score-num" id="score2">—</div>
+      <div class="score-bar"><div class="score-fill s2-fill" id="bar2" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- DUAL OUTPUTS -->
+  <div class="dual-output" id="dualOutput" style="display:none">
+    <div class="output-panel o1">
+      <div class="panel-header">
+        <span class="panel-label">◈ Alpha Output</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="panel-meta" id="time1">—</span>
+          <button class="copy-btn" onclick="copyText('out1')">COPY</button>
+        </div>
+      </div>
+      <div class="output-content empty" id="out1">Waiting for Alpha...</div>
+    </div>
+
+    <div class="output-panel o2">
+      <div class="panel-header">
+        <span class="panel-label">◈ Beta Output</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="panel-meta" id="time2">—</span>
+          <button class="copy-btn" onclick="copyText('out2')">COPY</button>
+        </div>
+      </div>
+      <div class="output-content empty" id="out2">Waiting for Beta...</div>
+    </div>
+  </div>
+
+  <!-- CONSENSUS OUTPUT -->
+  <div class="consensus-panel hidden" id="consensusPanel">
+    <div class="panel-header">
+      <h3>◈ CONSENSUS OUTPUT</h3>
+      <span class="consensus-badge">VERIFIED</span>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="copy-btn" onclick="copyText('consensusOut')">COPY</button>
+      </div>
+    </div>
+    <div class="consensus-content" id="consensusOut">Processing consensus...</div>
+  </div>
+
+</div>
+
+<script>
+let currentMode = 'parallel';
+let isRunning = false;
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+}
+
+function updatePill(num, status) {
+  const pill = document.getElementById(`pill${num}`);
+  pill.className = `pill ${status}`;
+}
+
+async function testServer(num) {
+  const url = document.getElementById(`url${num}`).value.trim();
+  const model = document.getElementById(`model${num}`).value.trim();
+  const card = document.getElementById(`card${num}`);
+  updatePill(num, 'pending');
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    let resp;
+    try {
+      resp = await fetch(`${url}/api/tags`, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (resp && resp.ok) {
+      const data = await resp.json();
+      card.className = `server-card s${num} active`;
+      updatePill(num, 'online');
+      const models = (data.models || []).map(m => m.name).join(', ') || 'none pulled';
+      // non-blocking notification: use console and pill state instead of alert
+      console.log(`Server ${num} online. Models: ${models}`);
+    } else {
+      throw new Error(resp ? `HTTP ${resp.status}` : 'No response');
+    }
+  } catch (e) {
+    card.className = `server-card s${num} error`;
+    updatePill(num, 'offline');
+    const msg = e && e.message ? e.message : String(e);
+    console.error(`Server ${num} unreachable:`, e);
+    alert(`✗ Server ${num} unreachable: ${msg}`);
+  }
+}
+
+async function queryOllama(url, model, prompt, onToken) {
+  const start = Date.now();
+  const resp = await fetch(`${url}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, prompt, stream: true })
+  });
+
+  if (!resp.ok) {
+    // try to include any server message
+    const txt = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status}: ${txt}`);
+  }
+
+  // If there's no streaming body (older fetch impls / proxies), fall back to text
+  if (!resp.body || typeof resp.body.getReader !== 'function') {
+    const text = await resp.text();
+    // try parse as JSON or return raw
+    try {
+      const j = JSON.parse(text);
+      const out = j.response || text;
+      onToken(out);
+      return { text: out, elapsed: ((Date.now() - start) / 1000).toFixed(1) + 's' };
+    } catch {
+      onToken(text);
+      return { text, elapsed: ((Date.now() - start) / 1000).toFixed(1) + 's' };
+    }
+  }
+
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  let full = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+
+    // handle common streaming formats: newline-delimited JSON, or SSE 'data: ' lines
+    const parts = buf.split('\n');
+    // keep last partial piece in buffer
+    buf = parts.pop() || '';
+
+    for (let part of parts) {
+      part = part.trim();
+      if (!part) continue;
+      // strip SSE prefix if present
+      if (part.startsWith('data:')) part = part.replace(/^data:\s*/, '');
+      try {
+        const json = JSON.parse(part);
+        if (json.response !== undefined) {
+          full += json.response;
+          onToken(full);
+        } else if (typeof json === 'string') {
+          full += json;
+          onToken(full);
+        }
+      } catch (e) {
+        // Not JSON: treat as raw text chunk
+        full += part;
+        onToken(full);
+      }
+    }
+  }
+
+  // flush any remaining buffer
+  if (buf.trim()) {
+    let leftover = buf.trim();
+    if (leftover.startsWith('data:')) leftover = leftover.replace(/^data:\s*/, '');
+    try {
+      const json = JSON.parse(leftover);
+      if (json.response !== undefined) {
+        full += json.response;
+        onToken(full);
+      }
+    } catch {
+      full += leftover;
+      onToken(full);
+    }
+  }
+
+  return { text: full, elapsed: ((Date.now() - start) / 1000).toFixed(1) + 's' };
+}
+
+function setEl(id, text, empty = false) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = empty ? 'output-content empty' : 'output-content';
+}
+
+function estimateConfidence(text) {
+  // Heuristic: longer, has code blocks, fewer "I don't know" phrases
+  let score = 0;
+  if (text.length > 200) score += 30;
+  if (text.length > 500) score += 20;
+  if (text.includes('```') || text.includes('def ') || text.includes('function ') || text.includes('class ')) score += 30;
+  if (!text.toLowerCase().includes("i'm not sure") && !text.toLowerCase().includes("i don't know")) score += 20;
+  return Math.min(score, 100);
+}
+
+async function run() {
+  if (isRunning) return;
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt) { alert('Please enter a coding prompt.'); return; }
+
+  const url1 = document.getElementById('url1').value.trim();
+  const url2 = document.getElementById('url2').value.trim();
+  const model1 = document.getElementById('model1').value.trim();
+  const model2 = document.getElementById('model2').value.trim();
+
+  isRunning = true;
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('processing').classList.remove('hidden');
+  document.getElementById('dualOutput').style.display = 'grid';
+  document.getElementById('consensusPanel').classList.add('hidden');
+  document.getElementById('scoreSection').classList.add('hidden');
+
+  setEl('out1', 'Streaming from Alpha...', true);
+  setEl('out2', 'Streaming from Beta...', true);
+  document.getElementById('time1').textContent = '⏳';
+  document.getElementById('time2').textContent = '⏳';
+
+  let result1 = null, result2 = null;
+
+  try {
+    if (currentMode === 'parallel') {
+      // PARALLEL: both at once
+      document.getElementById('processingText').textContent = 'Running both servers in parallel...';
+      const p1 = queryOllama(url1, model1, prompt, t => setEl('out1', t));
+      const p2 = queryOllama(url2, model2, prompt, t => setEl('out2', t));
+      const settled = await Promise.allSettled([p1, p2]);
+      const unwrap = (r) => {
+        if (r.status === 'fulfilled') return r.value;
+        const reason = r.reason;
+        const msg = reason && reason.message ? reason.message : String(reason);
+        return { text: `ERROR: ${msg}`, elapsed: '—' };
+      };
+      result1 = unwrap(settled[0]);
+      result2 = unwrap(settled[1]);
+
+    } else if (currentMode === 'verify') {
+      // VERIFY: alpha first, then beta reviews
+      document.getElementById('processingText').textContent = 'Alpha generating code...';
+      try {
+        result1 = await queryOllama(url1, model1, prompt, t => setEl('out1', t));
+      } catch(e) {
+        result1 = { text: `ERROR: ${e.message}`, elapsed: '—' };
+        setEl('out1', result1.text);
+      }
+      document.getElementById('processingText').textContent = 'Beta verifying Alpha\'s code...';
+      const verifyPrompt = `You are a strict code reviewer. Review and improve the following code solution.\n\nORIGINAL REQUEST: ${prompt}\n\nALPHA'S CODE:\n${result1.text}\n\nProvide a corrected, improved version. Fix any bugs. If it's already correct, return it with a brief note explaining why it's correct.`;
+      try {
+        result2 = await queryOllama(url2, model2, verifyPrompt, t => setEl('out2', t));
+      } catch(e) {
+        result2 = { text: `ERROR: ${e.message}`, elapsed: '—' };
+        setEl('out2', result2.text);
+      }
+
+    } else if (currentMode === 'debate') {
+      // DEBATE: both run, then each critiques the other
+      document.getElementById('processingText').textContent = 'Initial parallel generation...';
+      const p1 = queryOllama(url1, model1, prompt, t => setEl('out1', t));
+      const p2 = queryOllama(url2, model2, prompt, t => setEl('out2', t));
+      const settled2 = await Promise.allSettled([p1, p2]);
+      const unwrap2 = (r) => {
+        if (r.status === 'fulfilled') return r.value;
+        const reason = r.reason;
+        const msg = reason && reason.message ? reason.message : String(reason);
+        return { text: `ERROR: ${msg}`, elapsed: '—' };
+      };
+      result1 = unwrap2(settled2[0]);
+      result2 = unwrap2(settled2[1]);
+    }
+
+    document.getElementById('time1').textContent = result1.elapsed;
+    document.getElementById('time2').textContent = result2.elapsed;
+
+    // Scores
+    const c1 = estimateConfidence(result1.text);
+    const c2 = estimateConfidence(result2.text);
+    document.getElementById('score1').textContent = c1 + '%';
+    document.getElementById('score2').textContent = c2 + '%';
+    document.getElementById('bar1').style.width = c1 + '%';
+    document.getElementById('bar2').style.width = c2 + '%';
+    document.getElementById('scoreSection').classList.remove('hidden');
+
+    // Build consensus
+    document.getElementById('processingText').textContent = 'Building consensus...';
+    document.getElementById('consensusPanel').classList.remove('hidden');
+
+    const consensusPrompt = buildConsensusPrompt(prompt, result1.text, result2.text, currentMode);
+    try {
+      await queryOllama(url1, model1, consensusPrompt, t => {
+        document.getElementById('consensusOut').textContent = t;
+      });
+    } catch(e) {
+      // fallback: pick better one
+      const best = c1 >= c2 ? result1.text : result2.text;
+      document.getElementById('consensusOut').textContent = best;
+    }
+
+  } catch (e) {
+    document.getElementById('processingText').textContent = 'Error: ' + e.message;
+  }
+
+  document.getElementById('processing').classList.add('hidden');
+  document.getElementById('runBtn').disabled = false;
+  isRunning = false;
+}
+
+function buildConsensusPrompt(original, r1, r2, mode) {
+  if (mode === 'verify') {
+    return `You are a senior software engineer. Given this coding task and two code solutions, produce the FINAL BEST solution.\n\nTASK: ${original}\n\nSOLUTION A (original):\n${r1}\n\nSOLUTION B (reviewed/improved):\n${r2}\n\nOutput ONLY the final code with a brief explanation. No comparisons needed. Just the best solution.`;
+  } else if (mode === 'debate') {
+    return `You are a senior software engineer acting as judge. Two AI models each answered this coding question. Synthesise the BEST solution by taking the strongest parts of each.\n\nQUESTION: ${original}\n\nMODEL A:\n${r1}\n\nMODEL B:\n${r2}\n\nProvide the final, optimal, merged solution.`;
+  } else {
+    return `Two AI models answered the same coding question. Choose the better solution OR merge them if both have good parts.\n\nQUESTION: ${original}\n\nMODEL A:\n${r1}\n\nMODEL B:\n${r2}\n\nOutput: final best solution with a one-line note on why.`;
+  }
+}
+
+async function copyText(id) {
+  const text = document.getElementById(id).textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+}
+
+function clearAll() {
+  document.getElementById('prompt').value = '';
+  document.getElementById('dualOutput').style.display = 'none';
+  document.getElementById('consensusPanel').classList.add('hidden');
+  document.getElementById('scoreSection').classList.add('hidden');
+  document.getElementById('processing').classList.add('hidden');
+  document.getElementById('runBtn').disabled = false;
+  isRunning = false;
+}
+</script>
+</body>
+</html>

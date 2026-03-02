@@ -6,6 +6,41 @@ import json
 import time
 import math
 import os
+import platform
+import subprocess
+
+# Text-to-Speech and Speech-to-Text
+try:
+    import pyttsx3
+    TTS_AVAILABLE = True
+except ImportError:
+    TTS_AVAILABLE = False
+
+try:
+    import speech_recognition as sr
+    STT_AVAILABLE = True
+except ImportError:
+    STT_AVAILABLE = False
+
+
+# ── Emoji & Font Configuration ──────────────────────────────────────────────
+# Enable emoji rendering on Windows by preferring fonts with emoji support
+SYSTEM = platform.system()
+EMOJI_CAPABLE = True
+
+# Font choices with emoji support
+if SYSTEM == "Windows":
+    EMOJI_FONT = ("Segoe UI Emoji", 9)  # Windows emoji font
+    BASE_FONT = ("Segoe UI", 10)
+    MONO_FONT = ("Consolas", 10)
+elif SYSTEM == "Darwin":  # macOS
+    EMOJI_FONT = ("Apple Color Emoji", 9)
+    BASE_FONT = ("San Francisco", 10)
+    MONO_FONT = ("Monaco", 10)
+else:  # Linux
+    EMOJI_FONT = ("DejaVu Sans", 10)
+    BASE_FONT = ("Ubuntu", 10)
+    MONO_FONT = ("Monospace", 10)
 
 
 # ── Colour palette ──────────────────────────────────────────────────────────
@@ -54,7 +89,223 @@ def load_window_geometry(window_name):
     return None
 
 
-# ── Ollama query (streaming) ─────────────────────────────────────────────────
+# ── Model Persistence ──────────────────────────────────────────────────────
+MODEL_CONFIG_FILE = os.path.join(os.path.dirname(__file__), ".model_config.json")
+SERVER_CONFIG_FILE = os.path.join(os.path.dirname(__file__), ".server_config.json")
+
+def save_server_url(server_id, url):
+    """Save the last used server URL"""
+    try:
+        data = {}
+        if os.path.exists(SERVER_CONFIG_FILE):
+            with open(SERVER_CONFIG_FILE, 'r') as f:
+                data = json.load(f)
+        data[f"server_{server_id}_url"] = url
+        with open(SERVER_CONFIG_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        pass
+
+def load_server_url(server_id, default=""):
+    """Load the last used server URL"""
+    try:
+        if os.path.exists(SERVER_CONFIG_FILE):
+            with open(SERVER_CONFIG_FILE, 'r') as f:
+                data = json.load(f)
+                return data.get(f"server_{server_id}_url", default)
+    except Exception as e:
+        pass
+    return default
+
+def save_model_selection(server_id, model_name):
+    """Save the last selected model for a server"""
+    try:
+        data = {}
+        if os.path.exists(MODEL_CONFIG_FILE):
+            with open(MODEL_CONFIG_FILE, 'r') as f:
+                data = json.load(f)
+        data[f"server_{server_id}"] = model_name
+        with open(MODEL_CONFIG_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        pass
+
+def load_model_selection(server_id, default=""):
+    """Load the last selected model for a server"""
+    try:
+        if os.path.exists(MODEL_CONFIG_FILE):
+            with open(MODEL_CONFIG_FILE, 'r') as f:
+                data = json.load(f)
+                return data.get(f"server_{server_id}", default)
+    except Exception as e:
+        pass
+    return default
+
+
+# ── Text-to-Speech Helper (pyttsx3) ────────────────────────────────────────
+class TextToSpeech:
+    def __init__(self):
+        self.engine = None
+        self.is_speaking = False
+        if TTS_AVAILABLE:
+            try:
+                self.engine = pyttsx3.init()
+                self.engine.setProperty('rate', 150)  # Speed
+                self.engine.setProperty('volume', 1.0)  # Volume
+                print("[OK] Text-to-Speech initialized")
+            except Exception as e:
+                print(f"[ERROR] TTS initialization failed: {e}")
+    
+    def speak(self, text, on_complete=None):
+        """Speak text asynchronously"""
+        if not self.engine or not text:
+            return False
+        
+        def speak_thread():
+            try:
+                self.is_speaking = True
+                self.engine.say(text)
+                self.engine.runAndWait()
+                self.is_speaking = False
+                if on_complete:
+                    on_complete()
+            except Exception as e:
+                print(f"TTS error: {e}")
+                self.is_speaking = False
+        
+        threading.Thread(target=speak_thread, daemon=True).start()
+        return True
+    
+    def stop(self):
+        """Stop current speech"""
+        if self.engine:
+            try:
+                self.engine.stop()
+                self.is_speaking = False
+            except Exception as e:
+                print(f"Error stopping speech: {e}")
+
+
+# ── Speech-to-Text Helper (SpeechRecognition) ──────────────────────────────
+class SpeechToText:
+    def __init__(self):
+        self.recognizer = None
+        self.is_listening = False
+        self.pyaudio_available = False
+        self.stop_listening_requested = False
+        if STT_AVAILABLE:
+            try:
+                self.recognizer = sr.Recognizer()
+                self.recognizer.energy_threshold = 4000
+                # Test if PyAudio is available for microphone access
+                try:
+                    m = sr.Microphone()
+                    print("[DEBUG] Microphone object created")
+                    with m as src:
+                        self.recognizer.adjust_for_ambient_noise(src, duration=0.1)
+                    self.pyaudio_available = True
+                    print("[OK] Speech-to-Text initialized (microphone available)")
+                except Exception as e:
+                    error_str = str(e)
+                    print(f"[DEBUG] Microphone test exception: {type(e).__name__}: {error_str}")
+                    if "PyAudio" in error_str:
+                        print("[ERROR] PyAudio not found on this system")
+                        print("        Run: pip install pyaudio")
+                    else:
+                        print(f"[WARNING] Microphone test failed: {e}")
+                        # Try without noise adjustment as fallback
+                        try:
+                            m2 = sr.Microphone()
+                            self.pyaudio_available = True
+                            print("[OK] Microphone available (noise adjustment skipped)")
+                        except Exception as e2:
+                            print(f"[ERROR] Cannot initialize microphone: {e2}")
+            except Exception as e:
+                error_str = str(e)
+                if "PyAudio" in error_str:
+                    print("[ERROR] PyAudio is required for speech recognition")
+                    print("        Run: pip install pyaudio")
+                else:
+                    print(f"[ERROR] STT initialization failed: {e}")
+    
+    def listen(self, on_result=None, on_error=None, timeout=10):
+        """Listen for speech and return text"""
+        if not self.recognizer:
+            msg = "Speech-to-Text not initialized. Install SpeechRecognition package."
+            print(f"[ERROR] {msg}")
+            if on_error:
+                on_error(msg)
+            return None
+        
+        if not self.pyaudio_available:
+            msg = "Microphone not available. PyAudio may not be installed or microphone not detected."
+            print(f"[ERROR] {msg}")
+            if on_error:
+                on_error(msg)
+            return None
+        
+        self.stop_listening_requested = False
+        
+        def listen_thread():
+            try:
+                self.is_listening = True
+                print("[INFO] Listening for speech (max 10 seconds)...")
+                
+                # Try to get default microphone
+                try:
+                    with sr.Microphone() as source:
+                        self.recognizer.adjust_for_ambient_noise(source, duration=1)
+                        audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=timeout)
+                except sr.RequestError as e:
+                    if "PyAudio" in str(e):
+                        msg = "PyAudio not installed. Cannot access microphone."
+                    else:
+                        msg = f"Microphone error: {e}. Check microphone connection."
+                    print(f"[ERROR] {msg}")
+                    self.is_listening = False
+                    if on_error:
+                        on_error(msg)
+                    return
+                
+                # Check if stop was requested before processing
+                if self.stop_listening_requested:
+                    print("[INFO] Listening stopped by user")
+                    self.is_listening = False
+                    if on_error:
+                        on_error("Listening stopped")
+                    return
+                
+                # Try Google Speech Recognition (online)
+                try:
+                    text = self.recognizer.recognize_google(audio)
+                    print(f"[OK] Recognized: {text}")
+                    self.is_listening = False
+                    if on_result:
+                        on_result(text)
+                except sr.UnknownValueError:
+                    msg = "Could not understand audio. Please speak clearly."
+                    print(f"[INFO] {msg}")
+                    self.is_listening = False
+                    if on_error:
+                        on_error(msg)
+                except sr.RequestError as e:
+                    msg = f"Speech recognition error: {e}. Check internet connection."
+                    print(f"[ERROR] {msg}")
+                    self.is_listening = False
+                    if on_error:
+                        on_error(msg)
+            
+            except Exception as e:
+                self.is_listening = False
+                msg = f"Error: {str(e)[:50]}"
+                print(f"[ERROR] {msg}")
+                if on_error:
+                    on_error(msg)
+        
+        threading.Thread(target=listen_thread, daemon=True).start()
+
+
+# ── Ollama query (streaming) ───────────────────────────────────────────────────
 def query_ollama(url, model, prompt, on_token, stop_event):
     start = time.time()
     try:
@@ -403,6 +654,80 @@ class DashboardWindow(tk.Toplevel):
         try:
             # Save window geometry before closing
             save_window_geometry("dashboard", self.geometry())
+            self.destroy()
+        except:
+            pass
+
+
+# ── Output Window ──────────────────────────────────────────────────────────────
+class OutputWindow(tk.Toplevel):
+    def __init__(self, parent, title, text_widget, accent_color):
+        super().__init__(parent)
+        self.title(title)
+        
+        # Restore saved geometry or use default
+        saved_geom = load_window_geometry(f"output_{title}")
+        if saved_geom:
+            self.geometry(saved_geom)
+        else:
+            self.geometry("800x600")
+        
+        self.minsize(400, 300)
+        self.configure(bg=BG)
+        self.resizable(True, True)
+        
+        self.text_widget = text_widget
+        self.accent_color = accent_color
+        
+        self._build_window()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        
+    def _build_window(self):
+        """Build the output window UI"""
+        # Header frame
+        header = tk.Frame(self, bg=SURFACE)
+        header.pack(fill="x", padx=0)
+        
+        tk.Label(header, text=f"◈ {self.title()}", bg=SURFACE, fg=self.accent_color,
+                 font=("Courier New", 11, "bold")).pack(side="left", padx=12, pady=8)
+        
+        # Copy button in header
+        copy_btn = tk.Button(
+            header, text="COPY", bg=SURFACE2, fg=MUTED,
+            activebackground=SURFACE, activeforeground=ACCENT1,
+            font=("Courier New", 8), bd=0, relief="flat",
+            cursor="hand2", padx=8, pady=2,
+            command=self._copy_content,
+            highlightthickness=1, highlightbackground=BORDER
+        )
+        copy_btn.pack(side="right", padx=4)
+        
+        tk.Frame(self, bg=BORDER, height=1).pack(fill="x")
+        
+        # Text output area
+        output_text = tk.Text(
+            self, bg="#010409", fg=TEXT, insertbackground=TEXT,
+            font=("Consolas", 10), relief="flat", bd=0,
+            wrap="word", padx=10, pady=10,
+            selectbackground=self.accent_color, selectforeground="#000"
+        )
+        output_text.pack(fill="both", expand=True)
+        
+        # Copy content from the original text widget
+        content = self.text_widget.get("1.0", "end").strip()
+        output_text.insert("1.0", content)
+        output_text.config(state="disabled")  # Make read-only
+        
+    def _copy_content(self):
+        """Copy the output content to clipboard"""
+        content = self.text_widget.get("1.0", "end").strip()
+        self.clipboard_clear()
+        self.clipboard_append(content)
+        
+    def _on_close(self):
+        try:
+            # Save window geometry before closing
+            save_window_geometry(f"output_{self.title()}", self.geometry())
             self.destroy()
         except:
             pass
@@ -863,13 +1188,23 @@ class DualCoreApp(tk.Tk):
             self.geometry("1300x900")
         
         self.minsize(900, 700)
+        
+        # Start maximized (fullscreen)
+        self.state('zoomed')
 
+        # Initialize text-to-speech and speech-to-text
+        self.tts = TextToSpeech() if TTS_AVAILABLE else None
+        self.stt = SpeechToText() if STT_AVAILABLE else None
+        
         self.mode = tk.StringVar(value="parallel")
         self.prompt_type = tk.StringVar(value="code")  # "code" or "general"
         self.stop_event = threading.Event()
         self.is_running = False
         self.dashboard = None
         self.settings_window = None
+        self.output_window_alpha = None
+        self.output_window_beta = None
+        self.output_window_consensus = None
 
         self._build_styles()
         self._build_ui()
@@ -955,9 +1290,9 @@ class DualCoreApp(tk.Tk):
     def _build_header(self, parent):
         f = tk.Frame(parent, bg=BG, bd=0)
 
-        tk.Label(f, text="DUAL CORE", bg=BG, fg=ACCENT1,
+        tk.Label(f, text="⚡ DUAL CORE", bg=BG, fg=ACCENT1,
                  font=("Courier New", 26, "bold")).pack(side="left")
-        tk.Label(f, text="  PARALLEL OLLAMA CODING ENGINE", bg=BG, fg=MUTED,
+        tk.Label(f, text="  🤖 PARALLEL OLLAMA CODING ENGINE 🔥", bg=BG, fg=MUTED,
                  font=("Courier New", 10)).pack(side="left", padx=8)
 
         # Status pills
@@ -1017,10 +1352,10 @@ class DualCoreApp(tk.Tk):
         row.columnconfigure(0, weight=1)
         row.columnconfigure(1, weight=1)
 
-        # Server 1
+        # Alpha Server
         c1 = self._card(row, border=ACCENT1)
         c1.grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        tk.Label(c1, text="◈ SERVER ALPHA", bg=SURFACE, fg=ACCENT1,
+        tk.Label(c1, text="🟢 SERVER ALPHA", bg=SURFACE, fg=ACCENT1,
                  font=("Courier New", 9, "bold")).pack(anchor="w", padx=12, pady=(10, 6))
         f1 = tk.Frame(c1, bg=SURFACE)
         f1.pack(fill="x", padx=12)
@@ -1028,19 +1363,29 @@ class DualCoreApp(tk.Tk):
                  font=("Courier New", 8)).grid(row=0, column=0, sticky="w")
         tk.Label(f1, text="MODEL", bg=SURFACE, fg=MUTED,
                  font=("Courier New", 8)).grid(row=0, column=1, sticky="w", padx=(8, 0))
-        self.url1 = self._entry(f1, "http://localhost:11434")
+        # Load last used URL for Alpha, default to localhost:11434
+        self.url1 = self._entry(f1, load_server_url(1, "http://localhost:11434"))
         self.url1.grid(row=1, column=0, sticky="ew", pady=(2, 0))
-        self.model1 = self._combobox(f1, ["codellama"], "codellama")
+        # Bind to save URL when user changes it
+        self.url1.bind("<FocusOut>", lambda e: save_server_url(1, self.url1.get()))
+        # Load the last selected model for server 1, default to deepseek-coder
+        saved_model1 = load_model_selection(1, "deepseek-coder")
+        # Ensure saved model is in the initial values list
+        initial_models1 = ["deepseek-coder", "codellama", "llama2", saved_model1]
+        initial_models1 = list(dict.fromkeys(initial_models1))  # Remove duplicates while preserving order
+        self.model1 = self._combobox(f1, initial_models1, saved_model1)
         self.model1.grid(row=1, column=1, sticky="ew", pady=(2, 0), padx=(8, 0))
+        # Bind selection event to save model
+        self.model1.bind("<<ComboboxSelected>>", lambda e: save_model_selection(1, self.model1.get()))
         f1.columnconfigure(0, weight=2)
         f1.columnconfigure(1, weight=1)
         self._btn(c1, "▶  TEST CONNECTION", lambda: self._test(1), MUTED).pack(
             fill="x", padx=12, pady=10)
 
-        # Server 2
+        # Beta Server
         c2 = self._card(row, border=ACCENT2)
         c2.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-        tk.Label(c2, text="◈ SERVER BETA", bg=SURFACE, fg=ACCENT2,
+        tk.Label(c2, text="🔴 SERVER BETA", bg=SURFACE, fg=ACCENT2,
                  font=("Courier New", 9, "bold")).pack(anchor="w", padx=12, pady=(10, 6))
         f2 = tk.Frame(c2, bg=SURFACE)
         f2.pack(fill="x", padx=12)
@@ -1048,10 +1393,20 @@ class DualCoreApp(tk.Tk):
                  font=("Courier New", 8)).grid(row=0, column=0, sticky="w")
         tk.Label(f2, text="MODEL", bg=SURFACE, fg=MUTED,
                  font=("Courier New", 8)).grid(row=0, column=1, sticky="w", padx=(8, 0))
-        self.url2 = self._entry(f2, "http://192.168.127.121:11434")
+        # Load last used URL for Beta, default to localhost:11435
+        self.url2 = self._entry(f2, load_server_url(2, "http://localhost:11435"))
         self.url2.grid(row=1, column=0, sticky="ew", pady=(2, 0))
-        self.model2 = self._combobox(f2, ["deepseek-coder"], "deepseek-coder")
+        # Bind to save URL when user changes it
+        self.url2.bind("<FocusOut>", lambda e: save_server_url(2, self.url2.get()))
+        # Load the last selected model for server 2, default to deepseek-coder
+        saved_model2 = load_model_selection(2, "deepseek-coder")
+        # Ensure saved model is in the initial values list
+        initial_models2 = ["deepseek-coder", "codellama", "llama2", saved_model2]
+        initial_models2 = list(dict.fromkeys(initial_models2))  # Remove duplicates while preserving order
+        self.model2 = self._combobox(f2, initial_models2, saved_model2)
         self.model2.grid(row=1, column=1, sticky="ew", pady=(2, 0), padx=(8, 0))
+        # Bind selection event to save model
+        self.model2.bind("<<ComboboxSelected>>", lambda e: save_model_selection(2, self.model2.get()))
         f2.columnconfigure(0, weight=2)
         f2.columnconfigure(1, weight=1)
         self._btn(c2, "▶  TEST CONNECTION", lambda: self._test(2), MUTED).pack(
@@ -1060,7 +1415,7 @@ class DualCoreApp(tk.Tk):
     def _build_mode_selector(self, parent):
         card = self._card(parent)
         card.pack(fill="x", padx=0, pady=0)
-        tk.Label(card, text="◈ CONSENSUS STRATEGY", bg=SURFACE, fg=MUTED,
+        tk.Label(card, text="🧠 CONSENSUS STRATEGY", bg=SURFACE, fg=MUTED,
                  font=("Courier New", 8, "bold")).pack(anchor="w", padx=12, pady=(10, 6))
 
         mf = tk.Frame(card, bg=SURFACE)
@@ -1116,7 +1471,7 @@ class DualCoreApp(tk.Tk):
                       font=("Courier New", 9), selectcolor=SURFACE).pack(side="left", padx=8)
         
         # Prompt label
-        prompt_label_text = "◈ PROMPT"
+        prompt_label_text = "✏️  PROMPT"
         tk.Label(card, text=prompt_label_text, bg=SURFACE, fg=MUTED,
                  font=("Courier New", 8, "bold")).pack(anchor="w", padx=12, pady=(0, 4))
         
@@ -1128,17 +1483,78 @@ class DualCoreApp(tk.Tk):
         )
         self.prompt_box.pack(fill="both", expand=True, padx=12, pady=(0, 8))
 
+        # Speech control panel
+        speech_frame = tk.Frame(card, bg=SURFACE)
+        speech_frame.pack(fill="x", padx=12, pady=(0, 8))
+        
+        # Listen button (STT)
+        self.listen_btn = tk.Button(
+            speech_frame, text="🎤  LISTEN",
+            bg=SURFACE2 if STT_AVAILABLE else BORDER, fg=ACCENT3 if STT_AVAILABLE else MUTED,
+            activebackground=SURFACE if STT_AVAILABLE else SURFACE2,
+            font=("Courier New", 9), bd=0, relief="flat",
+            cursor="hand2" if STT_AVAILABLE else "arrow", padx=10, pady=4,
+            command=self._start_listening if STT_AVAILABLE else None,
+            state="normal" if STT_AVAILABLE else "disabled",
+            highlightthickness=1, highlightbackground=BORDER
+        )
+        self.listen_btn.pack(side="left", padx=(0, 6))
+        
+        # Stop listening button (STT)
+        self.stop_listen_btn = tk.Button(
+            speech_frame, text="⏹  STOP",
+            bg=SURFACE2 if STT_AVAILABLE else BORDER, fg="#ff6b6b" if STT_AVAILABLE else MUTED,
+            activebackground=SURFACE if STT_AVAILABLE else SURFACE2,
+            font=("Courier New", 9), bd=0, relief="flat",
+            cursor="hand2" if STT_AVAILABLE else "arrow", padx=10, pady=4,
+            command=self._stop_listen if STT_AVAILABLE else None,
+            state="normal" if STT_AVAILABLE else "disabled",
+            highlightthickness=1, highlightbackground=BORDER
+        )
+        self.stop_listen_btn.pack(side="left", padx=(0, 6))
+        
+        # Speak outputs button (TTS)
+        self.speak_btn = tk.Button(
+            speech_frame, text="🔊  SPEAK",
+            bg=SURFACE2 if TTS_AVAILABLE else BORDER, fg=ACCENT2 if TTS_AVAILABLE else MUTED,
+            activebackground=SURFACE if TTS_AVAILABLE else SURFACE2,
+            font=("Courier New", 9), bd=0, relief="flat",
+            cursor="hand2" if TTS_AVAILABLE else "arrow", padx=10, pady=4,
+            command=self._toggle_speak_outputs if TTS_AVAILABLE else None,
+            state="normal" if TTS_AVAILABLE else "disabled",
+            highlightthickness=1, highlightbackground=BORDER
+        )
+        self.speak_btn.pack(side="left", padx=(0, 6))
+        
+        # Stop speaking button (TTS)
+        self.stop_speak_btn = tk.Button(
+            speech_frame, text="⏹  STOP",
+            bg=SURFACE2 if TTS_AVAILABLE else BORDER, fg="#ff6b6b" if TTS_AVAILABLE else MUTED,
+            activebackground=SURFACE if TTS_AVAILABLE else SURFACE2,
+            font=("Courier New", 9), bd=0, relief="flat",
+            cursor="hand2" if TTS_AVAILABLE else "arrow", padx=10, pady=4,
+            command=self._stop_speak if TTS_AVAILABLE else None,
+            state="normal" if TTS_AVAILABLE else "disabled",
+            highlightthickness=1, highlightbackground=BORDER
+        )
+        self.stop_speak_btn.pack(side="left", padx=(0, 6))
+        
+        # Status indicator
+        self.speech_status_label = tk.Label(speech_frame, text="", bg=SURFACE, fg=ACCENT3,
+                                            font=("Courier New", 8))
+        self.speech_status_label.pack(side="left", padx=10)
+
         bf = tk.Frame(card, bg=SURFACE)
         bf.pack(fill="x", padx=12, pady=(0, 10))
         self.run_btn = tk.Button(
-            bf, text="▶  ENGAGE DUAL CORE",
+            bf, text="▶️  ENGAGE DUAL CORE 🚀",
             bg=ACCENT1, fg="#000000", activebackground="#00cc6a",
             font=("Courier New", 12, "bold"), bd=0, relief="flat",
             cursor="hand2", pady=10, command=self._run
         )
         self.run_btn.pack(side="left", fill="x", expand=True, padx=(0, 6))
         tk.Button(
-            bf, text="✕  CLEAR",
+            bf, text="❌  CLEAR",
             bg=SURFACE2, fg=MUTED, activebackground=SURFACE,
             font=("Courier New", 10), bd=0, relief="flat",
             cursor="hand2", pady=10, command=self._clear,
@@ -1152,7 +1568,7 @@ class DualCoreApp(tk.Tk):
             highlightthickness=1, highlightbackground=BORDER
         ).pack(side="left", padx=(0, 6), ipadx=20)
         tk.Button(
-            bf, text="⚙  MODEL SETTINGS",
+            bf, text="⚙️  MODEL SETTINGS",
             bg=SURFACE2, fg=ACCENT2, activebackground=SURFACE,
             font=("Courier New", 10), bd=0, relief="flat",
             cursor="hand2", pady=10, command=self._toggle_settings,
@@ -1160,7 +1576,7 @@ class DualCoreApp(tk.Tk):
         ).pack(side="left", padx=(0, 0), ipadx=20)
 
     def _build_status_bar(self, parent):
-        self.status_var = tk.StringVar(value="Ready.")
+        self.status_var = tk.StringVar(value="✅ Ready.")
         f = tk.Frame(parent, bg=SURFACE2, highlightthickness=1,
                      highlightbackground=BORDER)
         f.pack(fill="x", padx=0, pady=0)
@@ -1168,7 +1584,7 @@ class DualCoreApp(tk.Tk):
                  font=("Courier New", 9), anchor="w", padx=12, pady=6).pack(
             side="left", fill="x", expand=True)
         self.stop_btn = tk.Button(
-            f, text="■  STOP", bg=SURFACE2, fg=ERROR,
+            f, text="⚠️  STOP", bg=SURFACE2, fg=ERROR,
             activebackground=SURFACE, font=("Courier New", 9),
             bd=0, relief="flat", cursor="hand2", padx=12,
             command=self._stop, state="disabled"
@@ -1191,7 +1607,7 @@ class DualCoreApp(tk.Tk):
 
         sc1 = self._card(sf)
         sc1.grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        tk.Label(sc1, text="ALPHA CONFIDENCE", bg=SURFACE, fg=MUTED,
+        tk.Label(sc1, text="🟢 ALPHA CONFIDENCE", bg=SURFACE, fg=MUTED,
                  font=("Courier New", 8)).pack(anchor="w", padx=12, pady=(8, 2))
         self.score1_lbl = tk.Label(sc1, text="—", bg=SURFACE, fg=TEXT,
                                    font=("Courier New", 16, "bold"))
@@ -1202,7 +1618,7 @@ class DualCoreApp(tk.Tk):
 
         sc2 = self._card(sf)
         sc2.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-        tk.Label(sc2, text="BETA CONFIDENCE", bg=SURFACE, fg=MUTED,
+        tk.Label(sc2, text="🔴 BETA CONFIDENCE", bg=SURFACE, fg=MUTED,
                  font=("Courier New", 8)).pack(anchor="w", padx=12, pady=(8, 2))
         self.score2_lbl = tk.Label(sc2, text="—", bg=SURFACE, fg=TEXT,
                                    font=("Courier New", 16, "bold"))
@@ -1229,6 +1645,7 @@ class DualCoreApp(tk.Tk):
         self.time1_lbl = tk.Label(hdr1, text="—", bg=SURFACE, fg=MUTED,
                                    font=("Courier New", 8))
         self.time1_lbl.pack(side="right", padx=4)
+        self._window_btn(hdr1, self._open_output_window_alpha).pack(side="right", padx=2)
         self._copy_btn(hdr1, lambda: self._copy(self.out1)).pack(side="right", padx=4)
         tk.Frame(o1, bg=BORDER, height=1).pack(fill="x")
         self.out1 = self._output_box(o1, ACCENT1, height=0)
@@ -1243,6 +1660,7 @@ class DualCoreApp(tk.Tk):
         self.time2_lbl = tk.Label(hdr2, text="—", bg=SURFACE, fg=MUTED,
                                    font=("Courier New", 8))
         self.time2_lbl.pack(side="right", padx=4)
+        self._window_btn(hdr2, self._open_output_window_beta).pack(side="right", padx=2)
         self._copy_btn(hdr2, lambda: self._copy(self.out2)).pack(side="right", padx=4)
         tk.Frame(o2, bg=BORDER, height=1).pack(fill="x")
         self.out2 = self._output_box(o2, ACCENT2, height=0)
@@ -1259,6 +1677,7 @@ class DualCoreApp(tk.Tk):
         tk.Label(hdr_c, text="VERIFIED", bg="#0a1a22", fg=ACCENT3,
                  font=("Courier New", 8), padx=8, pady=2,
                  relief="flat").pack(side="left")
+        self._window_btn(hdr_c, self._open_output_window_consensus).pack(side="right", padx=2)
         self._copy_btn(hdr_c, lambda: self._copy(self.con_out)).pack(side="right", padx=12)
         tk.Frame(con, bg=BORDER, height=1).pack(fill="x")
         self.con_out = self._output_box(con, ACCENT3, height=0)
@@ -1319,6 +1738,15 @@ class DualCoreApp(tk.Tk):
             highlightthickness=1, highlightbackground=BORDER
         )
 
+    def _window_btn(self, parent, cmd):
+        return tk.Button(
+            parent, text="≣", bg=SURFACE2, fg=MUTED,
+            activebackground=SURFACE, activeforeground=ACCENT1,
+            font=("Courier New", 10), bd=0, relief="flat",
+            cursor="hand2", padx=6, pady=2, command=cmd,
+            highlightthickness=1, highlightbackground=BORDER
+        )
+
     def _output_box(self, parent, accent, height=0):
         # If height=0, use minimal height and let it expand
         box_height = 1 if height == 0 else height
@@ -1352,8 +1780,12 @@ class DualCoreApp(tk.Tk):
                 models_str = ", ".join(models) if models else "no models pulled"
                 # Update combobox with available models (must be on main thread)
                 def update_ui():
+                    current_model = model_box.get()
                     model_box['values'] = models
-                    if models:
+                    # Keep current selection if it's still available, otherwise use first
+                    if current_model in models:
+                        model_box.set(current_model)
+                    elif models:
                         model_box.set(models[0])
                 self.after(0, update_ui)
                 messagebox.showinfo(
@@ -1377,13 +1809,19 @@ class DualCoreApp(tk.Tk):
             url = (self.url1 if num == 1 else self.url2).get().strip()
             model_box = self.model1 if num == 1 else self.model2
             pill = self.pill1 if num == 1 else self.pill2
+            # Load the saved model selection BEFORE refresh
+            saved_model = load_model_selection(num, "")
             
             ok, info = test_connection(url)
             if ok:
                 models = info if info else []
                 def update_ui():
+                    # Update the available models
                     model_box['values'] = models
-                    if models:
+                    # Restore saved model if available, otherwise use first model
+                    if saved_model and saved_model in models:
+                        model_box.set(saved_model)
+                    elif models:
                         model_box.set(models[0])
                     # Set pill to online color
                     self._set_pill(pill, ACCENT1)
@@ -1476,7 +1914,7 @@ class DualCoreApp(tk.Tk):
         current_metrics = {"alpha_conf": 0, "alpha_tok": 0, "beta_conf": 0, "beta_tok": 0}
 
         if mode == "parallel":
-            self._set_status("Running both servers in parallel...")
+            self._set_status("⚡️ Running both servers in parallel...")
             r1_container, r2_container = [None], [None]
 
             def run1():
@@ -1536,7 +1974,7 @@ class DualCoreApp(tk.Tk):
             result2 = r2_container[0]
 
         elif mode == "verify":
-            self._set_status("Alpha generating code...")
+            self._set_status("🧠 Alpha generating code...")
             
             # Real-time callback for Alpha
             def on_token_alpha_verify(full_text):
@@ -1566,7 +2004,7 @@ class DualCoreApp(tk.Tk):
 
             prompt_type = self.prompt_type.get()
             if prompt_type == "code":
-                self._set_status("Beta verifying Alpha's code...")
+                self._set_status("💫 Beta verifying Alpha's code...")
                 verify_prompt = (
                     f"You are a strict code reviewer. Review and improve the following solution.\n\n"
                     f"ORIGINAL REQUEST: {prompt}\n\n"
@@ -1575,7 +2013,7 @@ class DualCoreApp(tk.Tk):
                     f"If already correct, confirm briefly."
                 )
             else:
-                self._set_status("Beta refining Alpha's answer...")
+                self._set_status("💫 Beta refining Alpha's answer...")
                 verify_prompt = (
                     f"You are a thoughtful expert. Review and refine the following answer.\n\n"
                     f"ORIGINAL QUESTION: {prompt}\n\n"
@@ -1609,7 +2047,7 @@ class DualCoreApp(tk.Tk):
             )
 
         elif mode == "debate":
-            self._set_status("Running initial parallel generation...")
+            self._set_status("⚔️  Running initial parallel generation...")
             r1_container, r2_container = [None], [None]
 
             def run1():
@@ -1667,7 +2105,7 @@ class DualCoreApp(tk.Tk):
             result2 = r2_container[0]
 
         if self.stop_event.is_set():
-            self._set_status("Stopped.")
+            self._set_status("⏹️  Stopped.")
             self._finish()
             return
 
@@ -1692,7 +2130,7 @@ class DualCoreApp(tk.Tk):
 
         # Consensus
         if result1 and result2 and result1["text"] and result2["text"]:
-            self._set_status("Building consensus...")
+            self._set_status("🧠 Building consensus...")
             prompt_type = self.prompt_type.get()
             con_prompt = build_consensus_prompt(
                 prompt, result1["text"], result2["text"], mode, prompt_type
@@ -1757,12 +2195,12 @@ class DualCoreApp(tk.Tk):
                     running=False
                 )
 
-        self._set_status("Done ✓")
+        self._set_status("✅ Done ✓")
         self._finish()
 
     def _stop(self):
         self.stop_event.set()
-        self._set_status("Stopping...")
+        self._set_status("⏹️  Stopping...")
 
     def _finish(self):
         self.is_running = False
@@ -1772,7 +2210,7 @@ class DualCoreApp(tk.Tk):
     def _clear(self):
         self.prompt_box.delete("1.0", "end")
         self._clear_outputs()
-        self._set_status("Ready.")
+        self._set_status("🧹 Ready.")
 
     def _clear_outputs(self):
         for box in (self.out1, self.out2, self.con_out):
@@ -1810,11 +2248,136 @@ class DualCoreApp(tk.Tk):
             self.settings_window.lift()
             self.settings_window.focus()
 
+    def _open_output_window_alpha(self):
+        if self.output_window_alpha is None or not self.output_window_alpha.winfo_exists():
+            self.output_window_alpha = OutputWindow(self, "ALPHA OUTPUT", self.out1, ACCENT1)
+        else:
+            self.output_window_alpha.lift()
+            self.output_window_alpha.focus()
+
+    def _open_output_window_beta(self):
+        if self.output_window_beta is None or not self.output_window_beta.winfo_exists():
+            self.output_window_beta = OutputWindow(self, "BETA OUTPUT", self.out2, ACCENT2)
+        else:
+            self.output_window_beta.lift()
+            self.output_window_beta.focus()
+
+    def _open_output_window_consensus(self):
+        if self.output_window_consensus is None or not self.output_window_consensus.winfo_exists():
+            self.output_window_consensus = OutputWindow(self, "CONSENSUS OUTPUT", self.con_out, ACCENT3)
+        else:
+            self.output_window_consensus.lift()
+            self.output_window_consensus.focus()
+
     def _copy(self, box):
         text = box.get("1.0", "end").strip()
         self.clipboard_clear()
         self.clipboard_append(text)
-        self._set_status("Copied to clipboard ✓")
+        self._set_status("📋 Copied to clipboard ✓")
+
+    def _update_speech_status(self, msg, duration=None):
+        """Update speech status label with optional auto-clear"""
+        def update():
+            self.speech_status_label.config(text=msg)
+            if duration:
+                self.after(duration, lambda: self.speech_status_label.config(text=""))
+        self.after(0, update)
+
+    def _start_listening(self):
+        """Start listening for speech input"""
+        if not self.stt:
+            msg = "❌ Speech recognition not available. Install: pip install pyaudio"
+            self._update_speech_status(msg, 6000)
+            messagebox.showwarning(
+                "Speech Recognition Not Ready",
+                "To use speech-to-text:\n\n"
+                "Python 3.13 or earlier: pip install pyaudio\n\n"
+                "Python 3.14: PyAudio wheels not yet available.\n"
+                "Options:\n"
+                "  1. Downgrade to Python 3.13 (recommended)\n"
+                "  2. Build from source: pip install --no-binary :all: pyaudio\n"
+                "  3. Use alternative: Manually type prompts\n\n"
+                "For now, just type your prompts manually!"
+            )
+            return
+        
+        if self.stt.is_listening:
+            self._update_speech_status("❌ Already listening", 3000)
+            return
+        
+        if not self.stt.recognizer:
+            self._update_speech_status("❌ Speech recognition not initialized", 5000)
+            self.listen_btn.config(state="disabled")
+            return
+        
+        self._update_speech_status("🎤 Listening... (speak now!)", 0)
+        self.listen_btn.config(state="disabled")
+        self.stop_listen_btn.config(state="normal")
+        
+        def on_result(text):
+            self._update_speech_status(f"✅ Recognized: {text[:30]}", 3000)
+            self.prompt_box.insert("end", text + " ")
+            self.listen_btn.config(state="normal")
+            self.stop_listen_btn.config(state="disabled")
+        
+        def on_error(err):
+            error_msg = f"❌ {err[:50]}"
+            print(f"STT Error: {error_msg}")
+            self._update_speech_status(error_msg, 5000)
+            self.listen_btn.config(state="normal")
+            self.stop_listen_btn.config(state="disabled")
+        
+        self.stt.listen(on_result=on_result, on_error=on_error)
+    
+    def _stop_listen(self):
+        """Stop listening for speech input"""
+        if not self.stt or not self.stt.is_listening:
+            return
+        
+        self.stt.stop_listening_requested = True
+        self._update_speech_status("⏹ Stopped listening", 2000)
+        self.listen_btn.config(state="normal")
+        self.stop_listen_btn.config(state="disabled")
+
+    def _toggle_speak_outputs(self):
+        """Toggle speaking of outputs"""
+        if not self.tts or not self.tts.engine:
+            self._update_speech_status("❌ TTS not available", 3000)
+            return
+        
+        # Get the consensus output text (or alpha if no consensus)
+        text = self.con_out.get("1.0", "end").strip() if hasattr(self, 'con_out') else ""
+        if not text:
+            text = self.out1.get("1.0", "end").strip() if hasattr(self, 'out1') else ""
+        
+        if not text:
+            self._update_speech_status("❌ No output to speak", 3000)
+            return
+        
+        if self.tts.is_speaking:
+            self._update_speech_status("⏸ Already speaking", 2000)
+            return
+        
+        self._update_speech_status("🔊 Speaking...")
+        self.speak_btn.config(state="disabled")
+        self.stop_speak_btn.config(state="normal")
+        
+        def on_complete():
+            self._update_speech_status("✅ Done speaking", 2000)
+            self.speak_btn.config(state="normal")
+            self.stop_speak_btn.config(state="disabled")
+        
+        self.tts.speak(text, on_complete=on_complete)
+    
+    def _stop_speak(self):
+        """Stop TTS playback"""
+        if not self.tts or not self.tts.is_speaking:
+            return
+        
+        self.tts.stop()
+        self._update_speech_status("⏹ Stopped", 2000)
+        self.speak_btn.config(state="normal")
+        self.stop_speak_btn.config(state="disabled")
 
     def _on_app_close(self):
         """Handle main app close - save geometry"""

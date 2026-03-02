@@ -1,0 +1,4 @@
+{
+  "server_2": "dolphin-llama3:8b",
+  "server_1": "mistral:latest"
+}

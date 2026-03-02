@@ -6,6 +6,11 @@ echo  ==========================================================
 echo.
 echo    Running two AI models simultaneously for better code...
 echo.
+
+:: Set Python 3.13 Tcl/Tk libraries (fix for Python 3.14 conflict)
+set "TCL_LIBRARY=C:\Users\nzweb\AppData\Local\Programs\Python\Python313\tcl\tcl8.6"
+set "TK_LIBRARY=C:\Users\nzweb\AppData\Local\Programs\Python\Python313\tcl\tk8.6"
+
 echo  Make sure you have TWO Ollama servers running:
 echo    Terminal 1: ollama serve
 echo    Terminal 2: OLLAMA_HOST=0.0.0.0:11435 ollama serve

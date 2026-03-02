@@ -1,3 +1,18 @@
+<!--
+  DUAL CORE — Web Interface (Experimental)
+  
+  ⚠️ STATUS: Reference implementation / Educational resource
+  
+  This is an alternative HTML/JavaScript interface provided as:
+  - Educational reference for web UI patterns
+  - Foundation for future Flask/FastAPI deployment
+  - Template for JavaScript streaming implementation
+  
+  ✓ For standard use, run the Tkinter app:
+    python app.py
+  
+  See ARCHITECTURE.md for details on both interfaces.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -598,10 +613,33 @@
     margin-top: 8px;
     font-size: 12px;
   }
+  .experimental-banner {
+    background: linear-gradient(135deg, rgba(255,107,53,0.1), rgba(255,107,53,0.05));
+    border: 1px solid var(--accent2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--accent2);
+  }
+  .experimental-banner strong {
+    font-weight: 700;
+  }
 </style>
 </head>
 <body>
 <div class="container">
+
+  <!-- EXPERIMENTAL BANNER -->
+  <div class="experimental-banner" role="alert">
+    <strong>⚠️ EXPERIMENTAL WEB INTERFACE</strong>
+    <div style="margin-top: 6px; color: var(--text);">
+      This is a reference implementation for educational purposes. 
+      <strong>For standard use, run the Tkinter app:</strong> <code style="background: var(--code-bg); padding: 2px 6px; border-radius: 4px;">python app.py</code>
+      <div style="margin-top: 6px;"><a href="ARCHITECTURE.md" style="color: var(--accent2); text-decoration: none;">See ARCHITECTURE.md for details →</a></div>
+    </div>
+  </div>
 
   <!-- HEADER -->
   <header>

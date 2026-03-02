@@ -1,1 +1,23 @@
-requests>=2.28.0
+# Core dependencies for Dual Core Coder
+# HTTP client for Ollama API communication
+requests>=2.28.0,<3.0.0
+
+# Text-to-Speech using pyttsx3 (offline, cross-platform)
+pyttsx3>=2.90
+
+# Speech-to-Text using SpeechRecognition
+# Note: Requires internet for Google Speech API, or add PocketSphinx for offline
+SpeechRecognition>=3.10.0
+
+# Note: tkinter (GUI framework) is included with Python 3.8+ by default
+# On Debian/Ubuntu, install system package: sudo apt-get install python3-tk
+# On Fedora/RHEL: sudo dnf install python3-tkinter
+# On macOS with Homebrew Python: brew install python-tk
+#
+# Audio input requirements:
+# - Windows: Uses native Windows audio API (built-in)
+# - macOS: Uses native audio (built-in)
+# - Linux: May need: sudo apt-get install python3-pyaudio
+#
+# For offline speech recognition, optionally add:
+# pocketsphinx>=0.1.0

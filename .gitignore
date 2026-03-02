@@ -41,8 +41,10 @@ env/
 .DS_Store
 Thumbs.db
 
-# Window geometry (user-specific)
+# User-specific config files (keep private)
 .window_geometry.json
+.model_config.json
+.server_config.json
 
 # Project specific
 *.log

@@ -301,12 +301,7 @@ Pull from [Ollama Hub](https://ollama.ai/library).
 - `/api/pull` — Pull new models
 
 ### Experimental Web Interface
-An HTML/JavaScript web-based version (`dual-ollama-coder.html`) is included as a reference implementation. **This is not recommended for standard use** but can serve as:
-- Educational reference for web UI patterns
-- Foundation for future Flask/FastAPI web deployment
-- Template for JavaScript streaming implementation
-
-See **[ARCHITECTURE.md](docs/ARCHITECTURE.md#alternative-interface-htmljavascript-web)** for details.
+An experimental HTML/JavaScript reference implementation was previously included but has been removed from this repository. See **[ARCHITECTURE.md](docs/ARCHITECTURE.md#alternative-interface-htmljavascript-web)** for web UI patterns and guidance.
 
 ### Custom Workflows
 Easily modify consensus prompts and add new modes in `app.py`

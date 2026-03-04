@@ -1,3 +1,4 @@
+````markdown
 # Interface Selection & Consolidation Guide
 
 ## Quick Answer
@@ -120,3 +121,5 @@ DUAL CORE CODER/
 - ✓ **No maintenance burden**: Independent implementations
 
 **Result**: Clearer project direction, reduced confusion, better documentation.
+
+````

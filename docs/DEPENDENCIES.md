@@ -1,3 +1,4 @@
+````markdown
 # Dual Core Coder — Dependencies Guide
 
 ## Python Version
@@ -169,10 +170,11 @@ pip install -r requirements.txt
 - **tkinter**: Uses system package
   - Version managed by OS Python installation
   - No third-party pin needed
-
-## Development Notes
-
+  
+- **Development Notes**
 - All imports are minimal and stable (no heavy framework dependencies)
 - The project has zero transitive dependency conflicts
 - Compatible with virtual environments: `python -m venv venv`
 - CI/CD friendly: Single `pip install -r requirements.txt` command
+
+````

@@ -1,3 +1,4 @@
+````markdown
 # Dual Core Coder — Architecture & Interface Guide
 
 ## Primary Interface: Tkinter (Desktop)
@@ -211,3 +212,5 @@ See **[DEPENDENCIES.md](DEPENDENCIES.md)** for details.
 **Use Tkinter (`app.py`) for normal operation.**  
 **Refer to HTML for learning web UI architecture.**  
 **Both exist independently; maintain as separate implementations.**
+
+````

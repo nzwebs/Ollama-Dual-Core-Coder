@@ -70,7 +70,7 @@ def main():
         return 0
     else:
         failed = sum(1 for r in results if not r)
-        print(f"✗ {failed} dependency issue(s) found — See DEPENDENCIES.md for help")
+        print(f"✗ {failed} dependency issue(s) found — See docs/DEPENDENCIES.md for help")
         return 1
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+````markdown
 # Speech Features - Troubleshooting Guide 🎙️
 
 ## Overview
@@ -100,3 +101,5 @@ If you can't get PyAudio working:
 ---
 
 **Got Questions?** Check the console output (press F12 or check terminal) for detailed error messages.
+
+````

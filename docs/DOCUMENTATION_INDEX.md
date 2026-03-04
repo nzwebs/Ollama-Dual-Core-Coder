@@ -1,3 +1,4 @@
+````markdown
 # Documentation Index
 
 Quick reference to all documentation files in Dual Core Coder.
@@ -106,3 +107,5 @@ README.md (entry point)
 **Last Updated**: 2026-03-01  
 **Primary Interface**: Tkinter (app.py)  
 **Status**: Production-ready with reference web interface
+
+````

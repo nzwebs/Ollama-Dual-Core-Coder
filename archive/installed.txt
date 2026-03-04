@@ -1,3 +1,4 @@
+```plaintext
 audioop-lts==0.2.2
 certifi==2026.2.25
 charset-normalizer==3.4.4
@@ -13,3 +14,5 @@ standard-aifc==3.13.0
 standard-chunk==3.13.0
 typing_extensions==4.15.0
 urllib3==2.6.3
+
+``` 

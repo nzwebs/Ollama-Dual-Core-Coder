@@ -4,7 +4,7 @@ A powerful dual-model AI coding assistant that runs two Ollama instances simulta
 
 **Primary Interface**: Tkinter Desktop Application (`app.py` — 2,481 lines)  
 **Status**: ✅ Production-Ready  
-**[See ARCHITECTURE.md](ARCHITECTURE.md) for interface & design details**
+**[See ARCHITECTURE.md](docs/ARCHITECTURE.md) for interface & design details**
 
 ## ✨ Features
 
@@ -112,13 +112,13 @@ python check-deps.py
 - **Python** — 3.13.12+ (for full speech features including PyAudio)
   - Python 3.14 has TTS but needs PyAudio wheels for STT
 - **Ollama** — https://ollama.com (two instances on ports 11434 & 11435)
-- **Dependencies** — See [DEPENDENCIES.md](DEPENDENCIES.md) or run `pip install -r requirements.txt`
+- **Dependencies** — See [DEPENDENCIES.md](docs/DEPENDENCIES.md) or run `pip install -r requirements.txt`
 - **Two Ollama servers** — Ports 11434 (Alpha) & 11435 (Beta)
 - **At least one model per server** — e.g. `ollama pull deepseek-coder`
 
 ### Python Dependencies
 
-See **[DEPENDENCIES.md](DEPENDENCIES.md)** for:
+See **[DEPENDENCIES.md](docs/DEPENDENCIES.md)** for:
 - Complete dependency list with versions
 - Platform-specific installation instructions (Windows, macOS, Linux)
 - Troubleshooting guide
@@ -213,7 +213,7 @@ All resizable via drag-and-drop sash dividers. Each output supports:
 - **Technology**: Google Cloud Speech API (requires internet + microphone)
 - **Current Version**: Python 3.13.12
 - **Note**: Python 3.14+ has no pre-built PyAudio wheels yet; use Python 3.13 for full speech features
-- **See [SPEECH_TROUBLESHOOTING.md](SPEECH_TROUBLESHOOTING.md) for setup**
+- **See [SPEECH_TROUBLESHOOTING.md](docs/SPEECH_TROUBLESHOOTING.md) for setup**
 
 ## 💾 Persistent State
 
@@ -306,7 +306,7 @@ An HTML/JavaScript web-based version (`dual-ollama-coder.html`) is included as a
 - Foundation for future Flask/FastAPI web deployment
 - Template for JavaScript streaming implementation
 
-See **[ARCHITECTURE.md](ARCHITECTURE.md#alternative-interface-htmljavascript-web)** for details.
+See **[ARCHITECTURE.md](docs/ARCHITECTURE.md#alternative-interface-htmljavascript-web)** for details.
 
 ### Custom Workflows
 Easily modify consensus prompts and add new modes in `app.py`

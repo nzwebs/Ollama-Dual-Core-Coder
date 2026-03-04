@@ -2,6 +2,8 @@
 
 A powerful dual-model AI coding assistant that runs two Ollama instances simultaneously for more accurate and reliable code generation. Compare solutions, verify correctness, and reach consensus with confidence.
 
+![Dual Core Coder screenshot](dualcorecoder.png)
+
 **Primary Interface**: Tkinter Desktop Application (`app.py` — 2,481 lines)  
 **Status**: ✅ Production-Ready  
 **[See ARCHITECTURE.md](docs/ARCHITECTURE.md) for interface & design details**
